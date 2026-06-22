@@ -2,8 +2,6 @@
 
 **Pin Genie** is a Flutter-based Android app-lock project with a randomized PIN Genie unlock system, Material 3 interface, native AccessibilityService app guarding, biometric fallback, intruder-selfie logging, fake-crash disguise mode, and launcher app-disguise options.
 
-Current version: **1.2.23+120023**
-
 ---
 
 ## Highlights
