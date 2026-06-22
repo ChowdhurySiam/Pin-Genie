@@ -1,0 +1,22 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+.idea/
+.vscode/
+.DS_Store
+android/.gradle/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+# Pin Genie includes a fixed development update key so GitHub Actions APKs
+# can update over previous GitHub-built APKs. Do not remove this exception
+# unless you replace it with GitHub Secrets based release signing.
+!tool/
+!tool/signing/
+!tool/signing/pin_genie_update_key.jks

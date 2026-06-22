@@ -1,0 +1,36 @@
+name: pingenie
+version: 1.2.23+120023
+publish_to: "none"
+description: Pin Genie is a Flutter-based Material 3 expressive app lock with PIN Genie authentication and native Android app-lock service support.
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  crypto: ^3.0.6
+  shared_preferences: ^2.3.5
+  installed_apps: ^2.1.1
+  url_launcher: ^6.3.1
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/app_icon/disguise/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/app_icon/pin_genie_icon.png
+  adaptive_icon_background: "#11131A"
+  adaptive_icon_foreground: assets/app_icon/pin_genie_icon_foreground.png
+  min_sdk_android: 23
