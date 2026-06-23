@@ -1775,31 +1775,31 @@ class NativeLockActivity : Activity() {{
         val card = LinearLayout(this).apply {{
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(22), dp(26), dp(22), dp(24))
-            background = roundRect(themeCard(), dp(34))
+            setPadding(dp(18), dp(20), dp(18), dp(18))
+            background = roundRect(themeCard(), dp(28))
         }}
         container.addView(
             card,
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {{ bottomMargin = dp(22) }}
+            ).apply {{ bottomMargin = dp(16) }}
         )
 
         card.addView(TextView(this).apply {{
             text = "Unlock protection"
             setTextColor(themeTitle())
-            textSize = 30f
+            textSize = 24f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         }})
         card.addView(TextView(this).apply {{
-            text = "PIN Genie is required before opening $targetLabel. Tap the tile that contains each hidden PIN digit."
+            text = "Tap the tile containing each hidden PIN digit. Tiles reshuffle after every tap."
             setTextColor(themeBody())
-            textSize = 17f
+            textSize = 14f
             gravity = Gravity.CENTER
-            setLineSpacing(0f, 1.12f)
-            setPadding(0, dp(12), 0, dp(20))
+            setLineSpacing(0f, 1.08f)
+            setPadding(0, dp(8), 0, dp(14))
         }})
 
         dotsRow = LinearLayout(this).apply {{
@@ -1941,20 +1941,20 @@ class NativeLockActivity : Activity() {{
         val buckets = buildBuckets()
         val screenWidth = resources.displayMetrics.widthPixels
         val horizontalPagePadding = dp(22) * 2
-        val gap = dp(14)
+        val gap = dp(12)
         // Each tile has left/right margins of gap / 2. A two-column row therefore
         // consumes 2 * side + 2 * gap. The previous calculation only removed one
         // gap, so the native lock screen could overflow and visually clip/shift the
         // right column. Keep the grid inside the same centered content width as the
         // Flutter PIN Genie screen.
-        val maxTileSide = if (tileStyle() == "compact") dp(148) else dp(178)
+        val maxTileSide = if (tileStyle() == "compact") dp(132) else dp(158)
         val side = ((screenWidth - horizontalPagePadding - (gap * 2)) / 2).coerceAtMost(maxTileSide)
 
         buckets.forEach {{ bucket ->
             val tile = LinearLayout(this).apply {{
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                setPadding(dp(16), dp(18), dp(16), dp(18))
+                setPadding(dp(12), dp(14), dp(12), dp(14))
                 background = expressiveRoundRect(tileColor(bucket.tone), side, bucket.shape)
                 isClickable = true
                 isFocusable = true
@@ -1970,7 +1970,7 @@ class NativeLockActivity : Activity() {{
             iconWrap.addView(TextView(this).apply {{
                 text = bucket.arrow
                 setTextColor(tileForeground(bucket.tone))
-                textSize = 31f
+                textSize = 25f
                 gravity = Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 includeFontPadding = false
@@ -1981,14 +1981,14 @@ class NativeLockActivity : Activity() {{
             ))
             tile.addView(iconWrap, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(34)
+                dp(28)
             ))
 
             val digitsWrap = FrameLayout(this)
             digitsWrap.addView(TextView(this).apply {{
                 text = bucket.display
                 setTextColor(tileForeground(bucket.tone))
-                textSize = 27f
+                textSize = 23f
                 gravity = Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 includeFontPadding = false
@@ -2007,7 +2007,7 @@ class NativeLockActivity : Activity() {{
             labelWrap.addView(TextView(this).apply {{
                 text = bucket.label
                 setTextColor(withAlpha(tileForeground(bucket.tone), 188))
-                textSize = 16f
+                textSize = 13f
                 gravity = Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
                 includeFontPadding = false
@@ -2018,7 +2018,7 @@ class NativeLockActivity : Activity() {{
             ))
             tile.addView(labelWrap, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(30)
+                dp(24)
             ))
 
             tilesGrid.addView(

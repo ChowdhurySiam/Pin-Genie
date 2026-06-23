@@ -106,12 +106,12 @@ class PinGeniePadState extends State<PinGeniePad> {
         final availableWidth = constraints.hasBoundedWidth
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width - 44;
-        final maxSide = widget.tileStyle == PinGenieTileStyle.compact ? 148.0 : 176.0;
-        final side = min(max((availableWidth - 14) / 2, 118.0), maxSide);
+        final maxSide = widget.tileStyle == PinGenieTileStyle.compact ? 132.0 : 158.0;
+        final side = min(max((availableWidth - 12) / 2, 104.0), maxSide);
         return Wrap(
           alignment: WrapAlignment.center,
-          spacing: 14,
-          runSpacing: 14,
+          spacing: 12,
+          runSpacing: 12,
           children: List.generate(_buckets.length, (index) {
             final bucket = _buckets[index];
             return _GenieTile(
@@ -278,13 +278,13 @@ class _GenieTileState extends State<_GenieTile> {
               bottomRight: Radius.circular(widget.side * widget.shape.bottomRight),
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Column(
             children: [
               SizedBox(
-                height: 32,
+                height: 28,
                 child: Center(
-                  child: Icon(widget.icon, color: widget.foreground, size: 28),
+                  child: Icon(widget.icon, color: widget.foreground, size: 25),
                 ),
               ),
               Expanded(
@@ -297,7 +297,7 @@ class _GenieTileState extends State<_GenieTile> {
                         widget.digits,
                         maxLines: 1,
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               color: widget.foreground,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0.6,
@@ -309,12 +309,12 @@ class _GenieTileState extends State<_GenieTile> {
                 ),
               ),
               SizedBox(
-                height: 30,
+                height: 24,
                 child: Center(
                   child: Text(
                     widget.label,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
                           color: widget.foreground.withValues(alpha: 0.72),
                           fontWeight: FontWeight.w800,
                           height: 1,

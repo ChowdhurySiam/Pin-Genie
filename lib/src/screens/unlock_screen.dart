@@ -493,8 +493,8 @@ class _PinGenieUnlockBody extends StatelessWidget {
             child: child,
           ),
           child: ExpressiveCard(
-            padding: const EdgeInsets.all(24),
-            borderRadius: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+            borderRadius: 28,
             highlight: true,
             color: visuals.cardColor,
             borderColor: visuals.borderColor,
@@ -502,32 +502,32 @@ class _PinGenieUnlockBody extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  width: 74,
-                  height: 74,
+                  width: 58,
+                  height: 58,
                   decoration: BoxDecoration(
                     color: visuals.iconBackground,
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.circular(22),
                   ),
-                  child: Icon(Icons.lock_rounded, color: visuals.iconForeground, size: 38),
+                  child: Icon(Icons.lock_rounded, color: visuals.iconForeground, size: 30),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
                 Text(
                   'Unlock protection',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: visuals.titleColor,
                         fontWeight: FontWeight.w900,
                       ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
-                  'For each hidden PIN digit, tap the tile that contains that digit. Tiles reshuffle after every tap.',
+                  'Tap the tile containing each hidden PIN digit. Tiles reshuffle after every tap.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: visuals.bodyColor,
-                        height: 1.4,
+                        height: 1.32,
                       ),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 14),
                 PinDots(
                   filled: selections.length,
                   total: controller.pinLength,
@@ -555,10 +555,16 @@ class _PinGenieUnlockBody extends StatelessWidget {
                       : const SizedBox.shrink(),
                 ),
                 if (onRecovery != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   TextButton.icon(
                     onPressed: onRecovery,
-                    icon: const Icon(Icons.help_outline_rounded),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.help_outline_rounded, size: 18),
                     label: const Text('Forgot PIN?'),
                   ),
                 ],
@@ -566,7 +572,7 @@ class _PinGenieUnlockBody extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 96),
@@ -650,7 +656,7 @@ class _BiometricUnlockBody extends StatelessWidget {
                 Text(
                   copy.title,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: visuals.titleColor,
                         fontWeight: FontWeight.w900,
                       ),
@@ -659,12 +665,12 @@ class _BiometricUnlockBody extends StatelessWidget {
                 Text(
                   copy.description,
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: visuals.bodyColor,
-                        height: 1.4,
+                        height: 1.32,
                       ),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 14),
                 FilledButton.icon(
                   onPressed: prompting ? null : onScan,
                   icon: prompting
