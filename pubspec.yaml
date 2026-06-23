@@ -1,5 +1,5 @@
 name: pingenie
-version: 1.2.23+120023
+version: 1.2.24+120024
 publish_to: "none"
 description: Pin Genie is a Flutter-based Material 3 expressive app lock with PIN Genie authentication and native Android app-lock service support.
 

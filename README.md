@@ -2,6 +2,8 @@
 
 **Pin Genie** is a Flutter-based Android app-lock project with a randomized PIN Genie unlock system, Material 3 interface, native AccessibilityService app guarding, biometric fallback, intruder-selfie logging, fake-crash disguise mode, and launcher app-disguise options.
 
+Current version: **1.2.24+120024**
+
 ---
 
 ## Highlights
@@ -9,12 +11,15 @@
 - Randomized PIN Genie unlock screen
 - Native Android app-lock screen for selected apps
 - Optional biometric unlock switcher
+- Dedicated Security page for PIN reset, recovery, retry timeout, and fallback unlock controls
 - Installed-app picker and lock management
 - Per-app lock delay support
 - Intruder history and failed-unlock selfie capture
 - Fake crash screen with hidden unlock gesture
 - App disguise launcher aliases
 - Private notification protection option
+- Recovery codes and custom security question fallback
+- Configurable failed-PIN retry timeout
 - Material 3 responsive UI
 - GitHub Actions builds for ARM64, ARM32, and universal release APKs
 
@@ -46,6 +51,15 @@ The Flutter app stores the selected locked apps. The Android native Accessibilit
 ### Biometric unlock
 
 Biometric unlock is optional. PIN Genie remains the default unlock method, and the biometric option appears only when Android reports an enrolled biometric method.
+
+### Security and recovery
+
+The Settings screen includes a dedicated **Security** page for PIN reset, recovery methods, retry behavior, and unlock fallback options. Resetting the PIN requires the current PIN first.
+
+Recovery codes are generated as one-time codes and are shown only when created. The app stores salted hashes of those codes, not readable code text. Custom security-question answers are also stored as salted hashes.
+
+PIN retry timeout can be configured with a failed-attempt threshold and a custom timeout duration from seconds up to minutes. When the threshold is reached, PIN input is blocked only until the configured timeout expires.
+
 
 ### Intruder selfies
 

@@ -1,10 +1,9 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../app.dart';
 import '../utils/responsive.dart';
 import '../widgets/expressive_card.dart';
 import 'about_us_screen.dart';
-import 'intruder_selfies_screen.dart';
+import 'security_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -88,17 +87,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const _UnlockMethodCard(),
-          const SizedBox(height: 16),
-          const _LockDelayCard(),
-          const SizedBox(height: 16),
-          const _AdvancedSecurityCard(),
+          const _SecurityCard(),
           const SizedBox(height: 16),
           const _DesignCard(),
           const SizedBox(height: 16),
           const _AppDisguiseCard(),
-          const SizedBox(height: 16),
-          const _SecurityLogCard(),
           const SizedBox(height: 16),
           ExpressiveCard(
             borderRadius: 32,
@@ -122,220 +115,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _UnlockMethodCard extends StatelessWidget {
-  const _UnlockMethodCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = AppLockScope.of(context);
-    return ExpressiveCard(
-      borderRadius: 32,
-      padding: const EdgeInsets.all(8),
-      child: _SettingTile(
-        icon: Icons.lock_open_rounded,
-        title: 'Unlock Method',
-        subtitle: controller.biometricAvailable
-            ? _unlockMethodDescription(controller.effectiveUnlockMethod)
-            : 'Fingerprint or face unlock is unavailable. PIN-only mode is active.',
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _StatusChip(label: _unlockMethodLabel(controller.effectiveUnlockMethod)),
-            const SizedBox(width: 6),
-            const Icon(Icons.chevron_right_rounded),
-          ],
-        ),
-        onTap: () => _openUnlockMethodDialog(context, controller),
-      ),
-    );
-  }
-
-  Future<void> _openUnlockMethodDialog(BuildContext context, AppLockController controller) async {
-    await controller.refreshBiometricState();
-    if (!context.mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        return AlertDialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-          title: Row(
-            children: [
-              const Expanded(child: Text('Unlock Method')),
-              IconButton.filledTonal(
-                tooltip: 'Check biometric availability',
-                onPressed: controller.refreshBiometricState,
-                icon: controller.biometricChecking
-                    ? SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.3, color: colorScheme.primary),
-                      )
-                    : const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: AnimatedBuilder(
-              animation: controller,
-              builder: (context, _) {
-                final biometricEnabled = controller.biometricAvailable;
-                return SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _UnlockMethodRadioTile(
-                        value: UnlockMethod.pinOnly,
-                        selected: controller.effectiveUnlockMethod,
-                        enabled: true,
-                        icon: Icons.enhanced_encryption_rounded,
-                        title: 'PIN only',
-                        subtitle: 'Show only the PIN Genie randomized PIN entry screen.',
-                        onChanged: (value) { controller.setUnlockMethod(value); },
-                      ),
-                      _Divider(color: colorScheme.outlineVariant),
-                      _UnlockMethodRadioTile(
-                        value: UnlockMethod.fingerprintSwitch,
-                        selected: controller.effectiveUnlockMethod,
-                        enabled: biometricEnabled,
-                        icon: Icons.fingerprint_rounded,
-                        title: 'PIN with fingerprint switch',
-                        subtitle: 'Start with PIN Genie and show a small fingerprint button to switch modes.',
-                        onChanged: (value) { controller.setUnlockMethod(value); },
-                      ),
-                      _Divider(color: colorScheme.outlineVariant),
-                      _UnlockMethodRadioTile(
-                        value: UnlockMethod.pinWithHiddenFingerprint,
-                        selected: controller.effectiveUnlockMethod,
-                        enabled: biometricEnabled,
-                        icon: Icons.visibility_off_rounded,
-                        title: 'PIN + hidden fingerprint',
-                        subtitle: 'Keep the PIN screen visible while Android biometric unlock runs in the background.',
-                        onChanged: (value) { controller.setUnlockMethod(value); },
-                      ),
-                      if ((controller.biometricMessage ?? '').isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              controller.biometricMessage!,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  static String _unlockMethodLabel(UnlockMethod method) {
-    return switch (method) {
-      UnlockMethod.pinOnly => 'PIN only',
-      UnlockMethod.fingerprintSwitch => 'Switch',
-      UnlockMethod.pinWithHiddenFingerprint => 'PIN + Bio',
-    };
-  }
-
-  static String _unlockMethodDescription(UnlockMethod method) {
-    return switch (method) {
-      UnlockMethod.pinOnly => 'Only randomized PIN Genie is shown when unlocking.',
-      UnlockMethod.fingerprintSwitch => 'PIN Genie is default, with a fingerprint switch button.',
-      UnlockMethod.pinWithHiddenFingerprint => 'PIN Genie stays visible while biometric unlock runs silently.',
-    };
-  }
-}
-
-class _UnlockMethodRadioTile extends StatelessWidget {
-  const _UnlockMethodRadioTile({
-    required this.value,
-    required this.selected,
-    required this.enabled,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onChanged,
-  });
-
-  final UnlockMethod value;
-  final UnlockMethod selected;
-  final bool enabled;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final ValueChanged<UnlockMethod> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(26),
-      onTap: enabled ? () => onChanged(value) : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            _TileIcon(icon: icon),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: enabled ? null : colorScheme.onSurfaceVariant.withValues(alpha: 0.58),
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: enabled ? 1.0 : 0.56),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            _RadioMark(
-              selected: value == selected,
-              enabled: enabled,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _RadioMark extends StatelessWidget {
-  const _RadioMark({required this.selected, this.enabled = true});
+  const _RadioMark({required this.selected});
 
   final bool selected;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final activeColor = enabled ? colorScheme.primary : colorScheme.onSurfaceVariant.withValues(alpha: 0.45);
+    final activeColor = colorScheme.primary;
     final inactiveColor = colorScheme.outline;
 
     return AnimatedContainer(
@@ -364,326 +152,6 @@ class _RadioMark extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _RelockTimeoutOption extends StatelessWidget {
-  const _RelockTimeoutOption({
-    required this.value,
-    required this.selected,
-    required this.title,
-    required this.onChanged,
-    this.subtitle,
-  });
-
-  final RelockTimeoutMode value;
-  final RelockTimeoutMode selected;
-  final String title;
-  final String? subtitle;
-  final ValueChanged<RelockTimeoutMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = value == selected;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => onChanged(value),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        child: Row(
-          children: [
-            _RadioMark(selected: isSelected),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LockDelayCard extends StatelessWidget {
-  const _LockDelayCard();
-
-  Future<void> _openRelockDialog(BuildContext context, AppLockController controller) async {
-    var tempMode = controller.relockTimeoutMode;
-    var tempSeconds = controller.lockDelaySeconds;
-    final initialIndex = (tempSeconds - 1).clamp(0, 59);
-    final scrollController = FixedExtentScrollController(initialItem: initialIndex);
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final colorScheme = Theme.of(context).colorScheme;
-        final textTheme = Theme.of(context).textTheme;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> saveAndClose() async {
-              await controller.setLockDelaySeconds(tempSeconds);
-              await controller.setRelockTimeoutMode(tempMode);
-              if (context.mounted) Navigator.of(context).pop();
-            }
-
-            return AlertDialog(
-              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-              titlePadding: const EdgeInsets.fromLTRB(28, 28, 28, 6),
-              contentPadding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-              actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
-              title: Text(
-                'Relock Timeout',
-                style: textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: -0.8,
-                ),
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _RelockTimeoutOption(
-                        value: RelockTimeoutMode.immediately,
-                        selected: tempMode,
-                        title: 'Immediately',
-                        onChanged: (value) => setDialogState(() => tempMode = value),
-                      ),
-                      _RelockTimeoutOption(
-                        value: RelockTimeoutMode.afterScreenOff,
-                        selected: tempMode,
-                        title: 'After screen off',
-                        onChanged: (value) => setDialogState(() => tempMode = value),
-                      ),
-                      _RelockTimeoutOption(
-                        value: RelockTimeoutMode.custom,
-                        selected: tempMode,
-                        title: 'Custom',
-                        subtitle: _formatDelay(tempSeconds),
-                        onChanged: (value) => setDialogState(() => tempMode = value),
-                      ),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        child: tempMode == RelockTimeoutMode.custom
-                            ? Padding(
-                                padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
-                                child: Container(
-                                  height: 178,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
-                                    borderRadius: BorderRadius.circular(28),
-                                    border: Border.all(color: colorScheme.outlineVariant),
-                                  ),
-                                  child: CupertinoPicker(
-                                    scrollController: scrollController,
-                                    itemExtent: 46,
-                                    magnification: 1.1,
-                                    useMagnifier: true,
-                                    squeeze: 1.04,
-                                    selectionOverlay: Container(
-                                      margin: const EdgeInsets.symmetric(horizontal: 18),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary.withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(18),
-                                        border: Border.all(
-                                          color: colorScheme.primary.withValues(alpha: 0.22),
-                                        ),
-                                      ),
-                                    ),
-                                    onSelectedItemChanged: (index) {
-                                      setDialogState(() => tempSeconds = index + 1);
-                                    },
-                                    children: List.generate(60, (index) {
-                                      final seconds = index + 1;
-                                      final selected = seconds == tempSeconds;
-                                      return Center(
-                                        child: Text(
-                                          _formatDelay(seconds),
-                                          style: textTheme.titleLarge?.copyWith(
-                                            color: selected ? colorScheme.primary : colorScheme.onSurface,
-                                            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                                          ),
-                                        ),
-                                      );
-                                    }),
-                                  ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: saveAndClose,
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    scrollController.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = AppLockScope.of(context);
-
-    return ExpressiveCard(
-      borderRadius: 32,
-      padding: const EdgeInsets.all(8),
-      child: _SettingTile(
-        icon: Icons.timer_rounded,
-        title: 'Lock after leaving',
-        subtitle: _modeDescription(controller),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _StatusChip(label: _modeLabel(controller)),
-            const SizedBox(width: 6),
-            const Icon(Icons.chevron_right_rounded),
-          ],
-        ),
-        onTap: () => _openRelockDialog(context, controller),
-      ),
-    );
-  }
-
-  String _modeLabel(AppLockController controller) {
-    return switch (controller.relockTimeoutMode) {
-      RelockTimeoutMode.immediately => 'Immediately',
-      RelockTimeoutMode.afterScreenOff => 'Screen off',
-      RelockTimeoutMode.custom => _formatDelay(controller.lockDelaySeconds),
-    };
-  }
-
-  String _modeDescription(AppLockController controller) {
-    return switch (controller.relockTimeoutMode) {
-      RelockTimeoutMode.immediately => 'Relock as soon as you leave a protected app.',
-      RelockTimeoutMode.afterScreenOff => 'Keep unlocked until the screen turns off.',
-      RelockTimeoutMode.custom => 'Relock after ${_formatDelay(controller.lockDelaySeconds)}.',
-    };
-  }
-
-  static String _formatDelay(int seconds) {
-    if (seconds == 60) return '1 minute';
-    if (seconds == 1) return '1 second';
-    return '$seconds seconds';
-  }
-}
-
-class _AdvancedSecurityCard extends StatelessWidget {
-  const _AdvancedSecurityCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = AppLockScope.of(context);
-    final colorScheme = Theme.of(context).colorScheme;
-    return ExpressiveCard(
-      borderRadius: 32,
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          _SettingTile(
-            icon: Icons.camera_front_rounded,
-            title: 'Intruder attempt log',
-            subtitle: 'Save failed unlock attempts with time, method, and app name.',
-            trailing: Switch.adaptive(value: controller.intruderLogEnabled, onChanged: controller.setIntruderLogEnabled),
-          ),
-          _Divider(color: colorScheme.outlineVariant),
-          _SettingTile(
-            icon: Icons.photo_camera_rounded,
-            title: 'Intruder selfies',
-            subtitle: controller.cameraPermissionMessage ??
-                'Open captured intruder photos and manage camera permission.',
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Switch.adaptive(
-                  value: controller.intruderSelfieEnabled,
-                  onChanged: (value) => controller.setIntruderSelfieEnabled(value),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded),
-              ],
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const IntruderSelfiesScreen(),
-              ),
-            ),
-          ),
-          _Divider(color: colorScheme.outlineVariant),
-          _SettingTile(
-            icon: Icons.warning_amber_rounded,
-            title: 'Fake crash screen',
-            subtitle: 'Hide the lock behind a fake app-crash message before authentication.',
-            trailing: Switch.adaptive(value: controller.fakeCrashEnabled, onChanged: controller.setFakeCrashEnabled),
-          ),
-          _Divider(color: colorScheme.outlineVariant),
-          _SettingTile(
-            icon: Icons.notifications_off_rounded,
-            title: 'Private notification protection',
-            subtitle: 'Optional and off by default. Hide sensitive notification text for locked apps.',
-            trailing: Switch.adaptive(value: controller.privateNotificationEnabled, onChanged: controller.setPrivateNotificationEnabled),
-          ),
-          if (controller.privateNotificationEnabled) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(74, 0, 14, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: controller.openNotificationProtectionSettings,
-                  icon: const Icon(Icons.notification_important_rounded),
-                  label: const Text('Open notification permission'),
-                ),
-              ),
-            ),
-          ],
-          _Divider(color: colorScheme.outlineVariant),
-          _SettingTile(
-            icon: Icons.add_to_home_screen_rounded,
-            title: 'Quick Settings tile',
-            subtitle: 'Adds Lock now / pause control from Android Quick Settings.',
-            trailing: Switch.adaptive(value: controller.quickTileEnabled, onChanged: controller.setQuickTileEnabled),
-          ),
-        ],
       ),
     );
   }
@@ -774,121 +242,6 @@ class _DesignCard extends StatelessWidget {
 }
 
 
-class _SecurityLogCard extends StatelessWidget {
-  const _SecurityLogCard();
-
-  Future<void> _openHistoryDialog(BuildContext context, AppLockController controller) async {
-    await controller.refreshLockHistory();
-    if (!context.mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final colorScheme = Theme.of(context).colorScheme;
-            final events = controller.securityEvents;
-
-            Future<void> clearHistory() async {
-              await controller.clearSecurityEvents();
-              if (context.mounted) setDialogState(() {});
-            }
-
-            return AlertDialog(
-              icon: const Icon(Icons.history_rounded),
-              title: const Text('Lock history'),
-              content: SizedBox(
-                width: 520,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 460),
-                  child: events.isEmpty
-                      ? Text(
-                          'No lock history recorded yet.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: events.length,
-                          separatorBuilder: (_, __) => Divider(color: colorScheme.outlineVariant),
-                          itemBuilder: (context, index) {
-                            final event = events[index];
-                            final isUnlock = event.message.toLowerCase().contains('unlocked');
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
-                                backgroundColor: isUnlock
-                                    ? colorScheme.primaryContainer
-                                    : colorScheme.errorContainer,
-                                child: Icon(
-                                  isUnlock ? Icons.check_rounded : Icons.priority_high_rounded,
-                                  color: isUnlock
-                                      ? colorScheme.onPrimaryContainer
-                                      : colorScheme.onErrorContainer,
-                                ),
-                              ),
-                              title: Text(
-                                event.appLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                              subtitle: Text(
-                                '${event.method} • ${event.message} • ${_timeLabel(event.time)}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ),
-              actions: [
-                if (events.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: clearHistory,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text('Clear'),
-                  ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Done'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = AppLockScope.of(context);
-    return ExpressiveCard(
-      borderRadius: 32,
-      padding: const EdgeInsets.all(8),
-      child: _ActionTile(
-        icon: Icons.history_rounded,
-        title: 'Lock history',
-        subtitle:
-            '${controller.securityEvents.length} recorded security event${controller.securityEvents.length == 1 ? '' : 's'}. Tap to open history.',
-        onTap: () => _openHistoryDialog(context, controller),
-      ),
-    );
-  }
-
-  String _timeLabel(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-}
-
 class _ChoiceSheet<T> extends StatelessWidget {
   const _ChoiceSheet({
     required this.title,
@@ -929,6 +282,29 @@ class _ChoiceSheet<T> extends StatelessWidget {
 }
 
 
+
+
+class _SecurityCard extends StatelessWidget {
+  const _SecurityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = AppLockScope.of(context);
+    final recoveryStatus = controller.hasAnyRecoveryMethod ? 'Recovery configured' : 'Recovery not set';
+    return ExpressiveCard(
+      borderRadius: 32,
+      padding: const EdgeInsets.all(8),
+      child: _ActionTile(
+        icon: Icons.security_rounded,
+        title: 'Security',
+        subtitle: 'PIN reset, recovery codes, retry timeout, unlock fallback, and lock history. $recoveryStatus.',
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const SecurityScreen()),
+        ),
+      ),
+    );
+  }
+}
 
 class _AppDisguiseCard extends StatelessWidget {
   const _AppDisguiseCard();

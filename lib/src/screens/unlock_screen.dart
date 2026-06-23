@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -25,6 +27,7 @@ class _UnlockScreenState extends State<UnlockScreen> with SingleTickerProviderSt
   bool _biometricPrompting = false;
   bool _biometricFailed = false;
   bool _hiddenBiometricPromptStarted = false;
+  Timer? _retryTimer;
   _UnlockMethod _method = _UnlockMethod.pinGenie;
   late final AnimationController _shakeController;
   late final Animation<double> _shake;
@@ -57,12 +60,18 @@ class _UnlockScreenState extends State<UnlockScreen> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _shakeController.dispose();
     super.dispose();
   }
 
   Future<void> _selectBucket(Set<String> digits) async {
     final controller = AppLockScope.of(context);
+    if (controller.isPinRetryBlocked) {
+      HapticFeedback.mediumImpact();
+      _scheduleRetryTick();
+      return;
+    }
     HapticFeedback.selectionClick();
     setState(() {
       _error = false;
@@ -80,13 +89,204 @@ class _UnlockScreenState extends State<UnlockScreen> with SingleTickerProviderSt
     await controller.registerFailedAttempt(
       method: 'PIN Genie',
       message: 'Wrong PIN Genie pattern',
+      countsForRetry: true,
     );
+    _scheduleRetryTick();
     HapticFeedback.heavyImpact();
     setState(() {
       _error = true;
       _selections.clear();
     });
     _shakeController.forward(from: 0);
+  }
+
+
+  void _scheduleRetryTick() {
+    _retryTimer?.cancel();
+    final controller = AppLockScope.of(context);
+    if (!controller.isPinRetryBlocked) return;
+    final delay = controller.pinRetryRemaining + const Duration(milliseconds: 180);
+    _retryTimer = Timer(delay, () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _openRecoveryDialog() async {
+    final controller = AppLockScope.of(context);
+    if (!controller.hasAnyRecoveryMethod) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Recovery options',
+                  style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Only configured recovery methods are shown here.',
+                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+                if (controller.recoveryCodesEnabled)
+                  ListTile(
+                    leading: const Icon(Icons.password_rounded),
+                    title: const Text('Use recovery code'),
+                    subtitle: Text('${controller.recoveryCodeCount} code${controller.recoveryCodeCount == 1 ? '' : 's'} remaining'),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _openRecoveryCodeDialog();
+                    },
+                  ),
+                if (controller.securityQuestionEnabled)
+                  ListTile(
+                    leading: const Icon(Icons.help_rounded),
+                    title: const Text('Answer security question'),
+                    subtitle: Text(controller.securityQuestion ?? 'Configured question'),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _openSecurityAnswerDialog();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openRecoveryCodeDialog() async {
+    final controller = AppLockScope.of(context);
+    final codeController = TextEditingController();
+    var hasError = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              icon: const Icon(Icons.password_rounded),
+              title: const Text('Recovery code'),
+              content: TextField(
+                controller: codeController,
+                textCapitalization: TextCapitalization.characters,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'One-time recovery code',
+                  errorText: hasError ? 'Invalid or already used recovery code' : null,
+                ),
+                onSubmitted: (_) async {
+                  final verified = await controller.verifyAndConsumeRecoveryCode(codeController.text);
+                  if (verified) {
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                  } else {
+                    setDialogState(() => hasError = true);
+                  }
+                },
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+                FilledButton(
+                  onPressed: () async {
+                    final verified = await controller.verifyAndConsumeRecoveryCode(codeController.text);
+                    if (verified) {
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                    } else {
+                      setDialogState(() => hasError = true);
+                    }
+                  },
+                  child: const Text('Unlock'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    codeController.dispose();
+    if (ok == true) {
+      await _finishUnlock(method: 'Recovery code');
+    } else if (hasError) {
+      await controller.registerFailedAttempt(method: 'Recovery code', message: 'Invalid recovery code');
+    }
+  }
+
+  Future<void> _openSecurityAnswerDialog() async {
+    final controller = AppLockScope.of(context);
+    final answerController = TextEditingController();
+    var hasError = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              icon: const Icon(Icons.help_rounded),
+              title: const Text('Security question'),
+              content: SizedBox(
+                width: 460,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(controller.securityQuestion ?? 'Security question'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: answerController,
+                      obscureText: true,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Answer',
+                        errorText: hasError ? 'Wrong answer' : null,
+                      ),
+                      onSubmitted: (_) {
+                        final verified = controller.verifySecurityAnswer(answerController.text);
+                        if (verified) {
+                          Navigator.of(dialogContext).pop(true);
+                        } else {
+                          setDialogState(() => hasError = true);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+                FilledButton(
+                  onPressed: () {
+                    final verified = controller.verifySecurityAnswer(answerController.text);
+                    if (verified) {
+                      Navigator.of(dialogContext).pop(true);
+                    } else {
+                      setDialogState(() => hasError = true);
+                    }
+                  },
+                  child: const Text('Unlock'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    answerController.dispose();
+    if (ok == true) {
+      await controller.clearPinFailures();
+      await _finishUnlock(method: 'Security question');
+    } else if (hasError) {
+      await controller.registerFailedAttempt(method: 'Security question', message: 'Wrong security answer');
+    }
   }
 
   Future<void> _finishUnlock({required String method}) async {
@@ -172,6 +372,11 @@ class _UnlockScreenState extends State<UnlockScreen> with SingleTickerProviderSt
     final unlockMethod = controller.effectiveUnlockMethod;
     final showBiometricSwitch = controller.biometricAvailable && unlockMethod == UnlockMethod.fingerprintSwitch;
     final showBiometricBody = showBiometricSwitch && _method == _UnlockMethod.biometric;
+    if (controller.isPinRetryBlocked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scheduleRetryTick();
+      });
+    }
 
     return Scaffold(
       backgroundColor: visuals.background,
@@ -229,6 +434,9 @@ class _UnlockScreenState extends State<UnlockScreen> with SingleTickerProviderSt
                           controller: controller,
                           visuals: visuals,
                           onBucketSelected: _selectBucket,
+                          onRecovery: controller.hasAnyRecoveryMethod ? _openRecoveryDialog : null,
+                          retryBlocked: controller.isPinRetryBlocked,
+                          retryRemaining: controller.pinRetryRemaining,
                         )
                       : _BiometricUnlockBody(
                           key: const ValueKey('biometric'),
@@ -258,6 +466,9 @@ class _PinGenieUnlockBody extends StatelessWidget {
     required this.controller,
     required this.visuals,
     required this.onBucketSelected,
+    required this.retryBlocked,
+    required this.retryRemaining,
+    this.onRecovery,
   });
 
   final Animation<double> shake;
@@ -266,6 +477,9 @@ class _PinGenieUnlockBody extends StatelessWidget {
   final AppLockController controller;
   final _LockVisuals visuals;
   final ValueChanged<Set<String>> onBucketSelected;
+  final bool retryBlocked;
+  final Duration retryRemaining;
+  final VoidCallback? onRecovery;
 
   @override
   Widget build(BuildContext context) {
@@ -324,11 +538,13 @@ class _PinGenieUnlockBody extends StatelessWidget {
                 ),
                 AnimatedSize(
                   duration: const Duration(milliseconds: 220),
-                  child: error
+                  child: retryBlocked || error
                       ? Padding(
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(
-                            'Wrong PIN pattern. Try again.',
+                            retryBlocked
+                                ? 'Too many failed attempts. Try again in ${_formatRetryRemaining(retryRemaining)}.'
+                                : 'Wrong PIN pattern. Try again.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                   color: visuals.errorColor,
@@ -338,6 +554,14 @@ class _PinGenieUnlockBody extends StatelessWidget {
                         )
                       : const SizedBox.shrink(),
                 ),
+                if (onRecovery != null) ...[
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: onRecovery,
+                    icon: const Icon(Icons.help_outline_rounded),
+                    label: const Text('Forgot PIN?'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -346,18 +570,34 @@ class _PinGenieUnlockBody extends StatelessWidget {
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 96),
-            child: PinGeniePad(
-              randomize: controller.randomizeKeypad,
-              tileStyle: controller.tileStyle,
-              tileColors: visuals.tileColors,
-              tileForegroundColors: visuals.tileForegrounds,
-              onBucketSelected: onBucketSelected,
+            child: IgnorePointer(
+              ignoring: retryBlocked,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: retryBlocked ? 0.42 : 1,
+                child: PinGeniePad(
+                  randomize: controller.randomizeKeypad,
+                  tileStyle: controller.tileStyle,
+                  tileColors: visuals.tileColors,
+                  tileForegroundColors: visuals.tileForegrounds,
+                  onBucketSelected: onBucketSelected,
+                ),
+              ),
             ),
           ),
         ),
       ],
     );
   }
+}
+
+
+String _formatRetryRemaining(Duration remaining) {
+  final seconds = remaining.inSeconds <= 0 ? 1 : remaining.inSeconds;
+  if (seconds < 60) return '${seconds}s';
+  final minutes = seconds ~/ 60;
+  final rest = seconds % 60;
+  return rest == 0 ? '${minutes}m' : '${minutes}m ${rest}s';
 }
 
 class _BiometricUnlockBody extends StatelessWidget {

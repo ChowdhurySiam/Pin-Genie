@@ -89,7 +89,7 @@ class OnboardingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'You can change the PIN and lock behavior later from Settings.',
+                'You can reset the PIN and configure recovery later from Settings → Security.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,

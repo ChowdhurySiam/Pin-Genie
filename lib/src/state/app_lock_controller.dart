@@ -109,6 +109,15 @@ class AppLockController extends ChangeNotifier {
   static const _appListViewModeKey = 'app_list_view_mode';
   static const _appDisguiseKey = 'app_disguise';
   static const _failedAttemptsKey = 'failed_attempts';
+  static const _recoveryCodeSaltKey = 'recovery_code_salt';
+  static const _recoveryCodeHashesKey = 'recovery_code_hashes';
+  static const _securityQuestionKey = 'security_question';
+  static const _securityAnswerSaltKey = 'security_answer_salt';
+  static const _securityAnswerHashKey = 'security_answer_hash';
+  static const _failedPinAttemptCountKey = 'failed_pin_attempt_count';
+  static const _pinRetryBlockedUntilKey = 'pin_retry_blocked_until';
+  static const _pinFailureThresholdKey = 'pin_failure_threshold';
+  static const _pinRetryTimeoutSecondsKey = 'pin_retry_timeout_seconds';
   static const _nativeSecurityEventsMethod = 'readNativeSecurityEvents';
   static const _clearNativeSecurityEventsMethod = 'clearNativeSecurityEvents';
   static const _captureIntruderSelfieMethod = 'captureIntruderSelfie';
@@ -156,6 +165,15 @@ class AppLockController extends ChangeNotifier {
   String? _cameraPermissionMessage;
   Set<String> _lockedPackages = {};
   Map<String, int> _perAppDelaySeconds = {};
+  List<String> _recoveryCodeHashes = [];
+  String? _recoveryCodeSalt;
+  String? _securityQuestion;
+  String? _securityAnswerSalt;
+  String? _securityAnswerHash;
+  int _failedPinAttemptCount = 0;
+  DateTime? _pinRetryBlockedUntil;
+  int _pinFailureThreshold = 5;
+  int _pinRetryTimeoutSeconds = 30;
   List<SecurityEvent> _securityEvents = [];
   List<LockableApp> _deviceApps = [];
 
@@ -197,6 +215,25 @@ class AppLockController extends ChangeNotifier {
   String? get cameraPermissionMessage => _cameraPermissionMessage;
   Set<String> get lockedPackages => Set.unmodifiable(_lockedPackages);
   Map<String, int> get perAppDelaySeconds => Map.unmodifiable(_perAppDelaySeconds);
+  bool get recoveryCodesEnabled => _recoveryCodeHashes.isNotEmpty && (_recoveryCodeSalt?.isNotEmpty ?? false);
+  int get recoveryCodeCount => _recoveryCodeHashes.length;
+  bool get securityQuestionEnabled =>
+      (_securityQuestion?.isNotEmpty ?? false) &&
+      (_securityAnswerSalt?.isNotEmpty ?? false) &&
+      (_securityAnswerHash?.isNotEmpty ?? false);
+  String? get securityQuestion => _securityQuestion;
+  int get failedPinAttemptCount => _failedPinAttemptCount;
+  int get pinFailureThreshold => _pinFailureThreshold;
+  int get pinRetryTimeoutSeconds => _pinRetryTimeoutSeconds;
+  DateTime? get pinRetryBlockedUntil => _pinRetryBlockedUntil;
+  bool get isPinRetryBlocked => _pinRetryBlockedUntil?.isAfter(DateTime.now()) ?? false;
+  Duration get pinRetryRemaining {
+    final until = _pinRetryBlockedUntil;
+    if (until == null) return Duration.zero;
+    final remaining = until.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+  bool get hasAnyRecoveryMethod => recoveryCodesEnabled || securityQuestionEnabled;
   List<SecurityEvent> get securityEvents => List.unmodifiable(_securityEvents);
   List<SecurityEvent> get intruderSelfieEvents => _securityEvents.where((event) => event.hasSelfie).toList(growable: false);
   List<LockableApp> get apps => _deviceApps.isNotEmpty ? List.unmodifiable(_deviceApps) : fallbackLockableApps;
@@ -238,6 +275,22 @@ class AppLockController extends ChangeNotifier {
     _appListViewMode = _enumFromName(AppListViewMode.values, _prefs.getString(_appListViewModeKey), AppListViewMode.list);
     _appDisguise = _enumFromName(AppDisguiseOption.values, _prefs.getString(_appDisguiseKey), AppDisguiseOption.original);
     _securityEvents = _decodeEvents(_prefs.getStringList(_failedAttemptsKey) ?? const []);
+    _recoveryCodeSalt = _prefs.getString(_recoveryCodeSaltKey);
+    _recoveryCodeHashes = _prefs.getStringList(_recoveryCodeHashesKey) ?? const [];
+    _securityQuestion = _prefs.getString(_securityQuestionKey);
+    _securityAnswerSalt = _prefs.getString(_securityAnswerSaltKey);
+    _securityAnswerHash = _prefs.getString(_securityAnswerHashKey);
+    _failedPinAttemptCount = _prefs.getInt(_failedPinAttemptCountKey) ?? 0;
+    _pinFailureThreshold = (_prefs.getInt(_pinFailureThresholdKey) ?? 5).clamp(1, 10).toInt();
+    _pinRetryTimeoutSeconds = (_prefs.getInt(_pinRetryTimeoutSecondsKey) ?? 30).clamp(5, 3600).toInt();
+    final blockedUntilRaw = _prefs.getString(_pinRetryBlockedUntilKey);
+    _pinRetryBlockedUntil = blockedUntilRaw == null ? null : DateTime.tryParse(blockedUntilRaw);
+    if (_pinRetryBlockedUntil != null && !_pinRetryBlockedUntil!.isAfter(DateTime.now())) {
+      _pinRetryBlockedUntil = null;
+      _failedPinAttemptCount = 0;
+      await _prefs.remove(_pinRetryBlockedUntilKey);
+      await _prefs.setInt(_failedPinAttemptCountKey, 0);
+    }
     await _refreshNativeSecurityEvents(notify: false);
     _loaded = true;
     notifyListeners();
@@ -322,6 +375,11 @@ class AppLockController extends ChangeNotifier {
         'activeProfile': _activeProfile.name,
         'lockTheme': _lockTheme.name,
         'tileStyle': _tileStyle.name,
+        'pinFailureThreshold': _pinFailureThreshold,
+        'pinRetryTimeoutSeconds': _pinRetryTimeoutSeconds,
+        'recoveryCodesEnabled': recoveryCodesEnabled,
+        'securityQuestionEnabled': securityQuestionEnabled,
+        'securityQuestion': _securityQuestion ?? '',
       });
     } on MissingPluginException {
       _nativeLockSupported = false;
@@ -518,6 +576,95 @@ class AppLockController extends ChangeNotifier {
     await _prefs.setInt(_pinLengthKey, pin.length);
     await _prefs.setBool(_setupCompleteKey, true);
     await clearPinFailures();
+    await _syncNativeLockState();
+    notifyListeners();
+  }
+
+
+  Future<List<String>> generateRecoveryCodes({int count = 8}) async {
+    final safeCount = count.clamp(4, 12).toInt();
+    final salt = _generateSalt();
+    final codes = List<String>.generate(safeCount, (_) => _generateRecoveryCode());
+    _recoveryCodeSalt = salt;
+    _recoveryCodeHashes = codes.map((code) => _hashRecoveryCode(code, salt)).toList(growable: false);
+    await _prefs.setString(_recoveryCodeSaltKey, salt);
+    await _prefs.setStringList(_recoveryCodeHashesKey, _recoveryCodeHashes);
+    await _syncNativeLockState();
+    notifyListeners();
+    return codes;
+  }
+
+  Future<void> clearRecoveryCodes() async {
+    _recoveryCodeSalt = null;
+    _recoveryCodeHashes = [];
+    await _prefs.remove(_recoveryCodeSaltKey);
+    await _prefs.remove(_recoveryCodeHashesKey);
+    await _syncNativeLockState();
+    notifyListeners();
+  }
+
+  Future<bool> verifyAndConsumeRecoveryCode(String code) async {
+    final salt = _recoveryCodeSalt;
+    if (salt == null || _recoveryCodeHashes.isEmpty) return false;
+    final hash = _hashRecoveryCode(code, salt);
+    final index = _recoveryCodeHashes.indexWhere((item) => _constantTimeEquals(item, hash));
+    if (index < 0) return false;
+    _recoveryCodeHashes = [
+      for (var i = 0; i < _recoveryCodeHashes.length; i++)
+        if (i != index) _recoveryCodeHashes[i],
+    ];
+    if (_recoveryCodeHashes.isEmpty) {
+      _recoveryCodeSalt = null;
+      await _prefs.remove(_recoveryCodeSaltKey);
+      await _prefs.remove(_recoveryCodeHashesKey);
+    } else {
+      await _prefs.setStringList(_recoveryCodeHashesKey, _recoveryCodeHashes);
+    }
+    await clearPinFailures();
+    await _syncNativeLockState();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> setSecurityQuestion({required String question, required String answer}) async {
+    final cleanedQuestion = question.trim();
+    final cleanedAnswer = _normalizeSecurityAnswer(answer);
+    if (cleanedQuestion.length < 4 || cleanedAnswer.length < 2) return false;
+    final salt = _generateSalt();
+    _securityQuestion = cleanedQuestion;
+    _securityAnswerSalt = salt;
+    _securityAnswerHash = _hashSecurityAnswer(cleanedAnswer, salt);
+    await _prefs.setString(_securityQuestionKey, cleanedQuestion);
+    await _prefs.setString(_securityAnswerSaltKey, salt);
+    await _prefs.setString(_securityAnswerHashKey, _securityAnswerHash!);
+    await _syncNativeLockState();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> clearSecurityQuestion() async {
+    _securityQuestion = null;
+    _securityAnswerSalt = null;
+    _securityAnswerHash = null;
+    await _prefs.remove(_securityQuestionKey);
+    await _prefs.remove(_securityAnswerSaltKey);
+    await _prefs.remove(_securityAnswerHashKey);
+    await _syncNativeLockState();
+    notifyListeners();
+  }
+
+  bool verifySecurityAnswer(String answer) {
+    final salt = _securityAnswerSalt;
+    final expected = _securityAnswerHash;
+    if (salt == null || expected == null || !securityQuestionEnabled) return false;
+    return _constantTimeEquals(_hashSecurityAnswer(_normalizeSecurityAnswer(answer), salt), expected);
+  }
+
+  Future<void> setRetryPolicy({required int failureThreshold, required int timeoutSeconds}) async {
+    _pinFailureThreshold = failureThreshold.clamp(1, 10).toInt();
+    _pinRetryTimeoutSeconds = timeoutSeconds.clamp(5, 3600).toInt();
+    await _prefs.setInt(_pinFailureThresholdKey, _pinFailureThreshold);
+    await _prefs.setInt(_pinRetryTimeoutSecondsKey, _pinRetryTimeoutSeconds);
     await _syncNativeLockState();
     notifyListeners();
   }
@@ -872,7 +1019,11 @@ class AppLockController extends ChangeNotifier {
     String packageName = _ownPackageName,
     String method = 'PIN Genie',
     String message = 'Wrong authentication attempt',
+    bool countsForRetry = false,
   }) async {
+    if (countsForRetry) {
+      await _registerPinFailure();
+    }
     if (_intruderLogEnabled) {
       final selfieBase64 = _intruderSelfieEnabled ? await _captureIntruderSelfie() : null;
       await _prependSecurityEvent(
@@ -910,7 +1061,10 @@ class AppLockController extends ChangeNotifier {
   }
 
   Future<void> clearPinFailures() async {
-    // PIN entry is intentionally unlimited. This method remains for older migrations.
+    _failedPinAttemptCount = 0;
+    _pinRetryBlockedUntil = null;
+    await _prefs.setInt(_failedPinAttemptCountKey, 0);
+    await _prefs.remove(_pinRetryBlockedUntilKey);
     notifyListeners();
   }
 
@@ -952,6 +1106,15 @@ class AppLockController extends ChangeNotifier {
     _lockTheme = LockVisualTheme.defaultBlue;
     _tileStyle = PinGenieTileStyle.randomMaterial;
     _appDisguise = AppDisguiseOption.original;
+    _recoveryCodeHashes = [];
+    _recoveryCodeSalt = null;
+    _securityQuestion = null;
+    _securityAnswerSalt = null;
+    _securityAnswerHash = null;
+    _failedPinAttemptCount = 0;
+    _pinRetryBlockedUntil = null;
+    _pinFailureThreshold = 5;
+    _pinRetryTimeoutSeconds = 30;
     _securityEvents = [];
     await _syncNativeLockState();
     if (_nativeLockSupported) {
@@ -1046,6 +1209,47 @@ class AppLockController extends ChangeNotifier {
       }
     }
     return events;
+  }
+
+
+  Future<void> _registerPinFailure() async {
+    if (_pinRetryBlockedUntil != null && !_pinRetryBlockedUntil!.isAfter(DateTime.now())) {
+      _pinRetryBlockedUntil = null;
+      _failedPinAttemptCount = 0;
+      await _prefs.remove(_pinRetryBlockedUntilKey);
+    }
+    if (isPinRetryBlocked) return;
+    _failedPinAttemptCount += 1;
+    if (_failedPinAttemptCount >= _pinFailureThreshold) {
+      _pinRetryBlockedUntil = DateTime.now().add(Duration(seconds: _pinRetryTimeoutSeconds));
+      _failedPinAttemptCount = 0;
+      await _prefs.setString(_pinRetryBlockedUntilKey, _pinRetryBlockedUntil!.toIso8601String());
+    }
+    await _prefs.setInt(_failedPinAttemptCountKey, _failedPinAttemptCount);
+  }
+
+  String _generateRecoveryCode() {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final random = Random.secure();
+    final raw = List<String>.generate(12, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+    return '${raw.substring(0, 4)}-${raw.substring(4, 8)}-${raw.substring(8, 12)}';
+  }
+
+  String _normalizeRecoveryCode(String code) => code.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
+  String _hashRecoveryCode(String code, String salt) {
+    final normalized = _normalizeRecoveryCode(code);
+    final bytes = utf8.encode('recovery:$salt:$normalized');
+    return sha256.convert(bytes).toString();
+  }
+
+  String _normalizeSecurityAnswer(String answer) {
+    return answer.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  String _hashSecurityAnswer(String answer, String salt) {
+    final bytes = utf8.encode('security-question:$salt:$answer');
+    return sha256.convert(bytes).toString();
   }
 
   String _generateSalt() {

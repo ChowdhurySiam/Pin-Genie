@@ -748,6 +748,11 @@ class MainActivity : FlutterActivity() {{
             .putString(KEY_UNLOCK_METHOD, arguments?.get("unlockMethod") as? String ?: "fingerprintSwitch")
             .putString(KEY_LOCK_THEME, arguments?.get("lockTheme") as? String ?: "defaultBlue")
             .putString(KEY_TILE_STYLE, arguments?.get("tileStyle") as? String ?: "randomMaterial")
+            .putInt(KEY_PIN_FAILURE_THRESHOLD, ((arguments?.get("pinFailureThreshold") as? Int) ?: 5).coerceIn(1, 10))
+            .putInt(KEY_PIN_RETRY_TIMEOUT_SECONDS, ((arguments?.get("pinRetryTimeoutSeconds") as? Int) ?: 30).coerceIn(5, 3600))
+            .putBoolean(KEY_RECOVERY_CODES_ENABLED, arguments?.get("recoveryCodesEnabled") as? Boolean ?: false)
+            .putBoolean(KEY_SECURITY_QUESTION_ENABLED, arguments?.get("securityQuestionEnabled") as? Boolean ?: false)
+            .putString(KEY_SECURITY_QUESTION, arguments?.get("securityQuestion") as? String ?: "")
             .putStringSet(KEY_LOCKED_PACKAGES, lockedPackages)
             .apply()
     }}
@@ -974,6 +979,11 @@ class MainActivity : FlutterActivity() {{
         const val KEY_UNLOCK_METHOD = "unlock_method"
         const val KEY_LOCK_THEME = "lock_theme"
         const val KEY_TILE_STYLE = "tile_style"
+        const val KEY_PIN_FAILURE_THRESHOLD = "pin_failure_threshold"
+        const val KEY_PIN_RETRY_TIMEOUT_SECONDS = "pin_retry_timeout_seconds"
+        const val KEY_RECOVERY_CODES_ENABLED = "recovery_codes_enabled"
+        const val KEY_SECURITY_QUESTION_ENABLED = "security_question_enabled"
+        const val KEY_SECURITY_QUESTION = "security_question"
         const val KEY_LOCKED_PACKAGES = "locked_packages"
         const val KEY_APP_DISGUISE = "app_disguise"
     }}
@@ -2063,14 +2073,60 @@ class NativeLockActivity : Activity() {{
     }}
 
     private fun verifyOrReject() {{
+        if (isRetryBlocked()) {{
+            selectedBuckets.clear()
+            refreshDots()
+            Toast.makeText(this, "Try again in ${{retryRemainingSeconds()}}s", Toast.LENGTH_SHORT).show()
+            return
+        }}
         if (matchesSavedPin(selectedBuckets)) {{
+            clearNativePinFailures()
             unlockAndOpenTarget("PIN Genie")
             return
         }}
         recordSecurityEvent("PIN Genie", "Wrong PIN Genie pattern", true)
+        registerNativePinFailure()
         selectedBuckets.clear()
         refreshDots()
-        Toast.makeText(this, "Wrong PIN", Toast.LENGTH_SHORT).show()
+        if (isRetryBlocked()) {{
+            Toast.makeText(this, "Too many attempts. Try again in ${{retryRemainingSeconds()}}s", Toast.LENGTH_SHORT).show()
+        }} else {{
+            Toast.makeText(this, "Wrong PIN", Toast.LENGTH_SHORT).show()
+        }}
+    }}
+
+    private fun isRetryBlocked(): Boolean {{
+        val until = getSharedPreferences(NATIVE_PREFS, MODE_PRIVATE).getLong(KEY_PIN_RETRY_BLOCKED_UNTIL, 0L)
+        return until > System.currentTimeMillis()
+    }}
+
+    private fun retryRemainingSeconds(): Long {{
+        val until = getSharedPreferences(NATIVE_PREFS, MODE_PRIVATE).getLong(KEY_PIN_RETRY_BLOCKED_UNTIL, 0L)
+        val remaining = ((until - System.currentTimeMillis()) / 1000L).coerceAtLeast(1L)
+        return remaining
+    }}
+
+    private fun registerNativePinFailure() {{
+        val prefs = getSharedPreferences(NATIVE_PREFS, MODE_PRIVATE)
+        val threshold = flutterPrefs().getInt(KEY_PIN_FAILURE_THRESHOLD, 5).coerceIn(1, 10)
+        val timeoutMs = flutterPrefs().getInt(KEY_PIN_RETRY_TIMEOUT_SECONDS, 30).coerceIn(5, 3600) * 1000L
+        val nextCount = prefs.getInt(KEY_FAILED_PIN_ATTEMPT_COUNT, 0) + 1
+        val editor = prefs.edit()
+        if (nextCount >= threshold) {{
+            editor.putInt(KEY_FAILED_PIN_ATTEMPT_COUNT, 0)
+            editor.putLong(KEY_PIN_RETRY_BLOCKED_UNTIL, System.currentTimeMillis() + timeoutMs)
+        }} else {{
+            editor.putInt(KEY_FAILED_PIN_ATTEMPT_COUNT, nextCount)
+        }}
+        editor.apply()
+    }}
+
+    private fun clearNativePinFailures() {{
+        getSharedPreferences(NATIVE_PREFS, MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_FAILED_PIN_ATTEMPT_COUNT, 0)
+            .remove(KEY_PIN_RETRY_BLOCKED_UNTIL)
+            .apply()
     }}
 
     private fun matchesSavedPin(buckets: List<Set<String>>): Boolean {{
@@ -2501,6 +2557,10 @@ class NativeLockActivity : Activity() {{
         private const val KEY_UNLOCK_METHOD = "unlock_method"
         private const val KEY_LOCK_THEME = "lock_theme"
         private const val KEY_TILE_STYLE = "tile_style"
+        private const val KEY_PIN_FAILURE_THRESHOLD = "pin_failure_threshold"
+        private const val KEY_PIN_RETRY_TIMEOUT_SECONDS = "pin_retry_timeout_seconds"
+        private const val KEY_FAILED_PIN_ATTEMPT_COUNT = "failed_pin_attempt_count"
+        private const val KEY_PIN_RETRY_BLOCKED_UNTIL = "pin_retry_blocked_until"
         private val BG = Color.rgb(17, 20, 24)
         private val PRIMARY_CONTAINER = Color.rgb(62, 74, 134)
         private val SECONDARY_CONTAINER = Color.rgb(70, 75, 96)
