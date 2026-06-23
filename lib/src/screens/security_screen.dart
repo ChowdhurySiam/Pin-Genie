@@ -547,26 +547,25 @@ class _UnlockFallbackCard extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    RadioListTile<UnlockMethod>(
-                      value: UnlockMethod.pinOnly,
-                      groupValue: controller.effectiveUnlockMethod,
-                      onChanged: (value) => controller.setUnlockMethod(value!),
-                      title: const Text('PIN only'),
-                      subtitle: const Text('Use only randomized PIN Genie input.'),
+                    _ChoiceTile(
+                      selected: controller.effectiveUnlockMethod == UnlockMethod.pinOnly,
+                      title: 'PIN only',
+                      subtitle: 'Use only randomized PIN Genie input.',
+                      onTap: () => controller.setUnlockMethod(UnlockMethod.pinOnly),
                     ),
-                    RadioListTile<UnlockMethod>(
-                      value: UnlockMethod.fingerprintSwitch,
-                      groupValue: controller.effectiveUnlockMethod,
-                      onChanged: biometricEnabled ? (value) => controller.setUnlockMethod(value!) : null,
-                      title: const Text('PIN with fingerprint switch'),
-                      subtitle: const Text('Show a small fingerprint or face unlock switch.'),
+                    _ChoiceTile(
+                      selected: controller.effectiveUnlockMethod == UnlockMethod.fingerprintSwitch,
+                      enabled: biometricEnabled,
+                      title: 'PIN with fingerprint switch',
+                      subtitle: 'Show a small fingerprint or face unlock switch.',
+                      onTap: () => controller.setUnlockMethod(UnlockMethod.fingerprintSwitch),
                     ),
-                    RadioListTile<UnlockMethod>(
-                      value: UnlockMethod.pinWithHiddenFingerprint,
-                      groupValue: controller.effectiveUnlockMethod,
-                      onChanged: biometricEnabled ? (value) => controller.setUnlockMethod(value!) : null,
-                      title: const Text('PIN + hidden fingerprint'),
-                      subtitle: const Text('Run biometric unlock while the PIN screen remains visible.'),
+                    _ChoiceTile(
+                      selected: controller.effectiveUnlockMethod == UnlockMethod.pinWithHiddenFingerprint,
+                      enabled: biometricEnabled,
+                      title: 'PIN + hidden fingerprint',
+                      subtitle: 'Run biometric unlock while the PIN screen remains visible.',
+                      onTap: () => controller.setUnlockMethod(UnlockMethod.pinWithHiddenFingerprint),
                     ),
                     if (controller.biometricMessage != null)
                       Padding(
@@ -633,23 +632,23 @@ class _RelockDelayCard extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      RadioListTile<RelockTimeoutMode>(
-                        value: RelockTimeoutMode.immediately,
-                        groupValue: tempMode,
-                        onChanged: (value) => setDialogState(() => tempMode = value!),
-                        title: const Text('Immediately'),
+                      _ChoiceTile(
+                        selected: tempMode == RelockTimeoutMode.immediately,
+                        title: 'Immediately',
+                        subtitle: 'Lock protected apps as soon as the session ends.',
+                        onTap: () => setDialogState(() => tempMode = RelockTimeoutMode.immediately),
                       ),
-                      RadioListTile<RelockTimeoutMode>(
-                        value: RelockTimeoutMode.afterScreenOff,
-                        groupValue: tempMode,
-                        onChanged: (value) => setDialogState(() => tempMode = value!),
-                        title: const Text('After screen off'),
+                      _ChoiceTile(
+                        selected: tempMode == RelockTimeoutMode.afterScreenOff,
+                        title: 'After screen off',
+                        subtitle: 'Wait until the display is turned off before relocking.',
+                        onTap: () => setDialogState(() => tempMode = RelockTimeoutMode.afterScreenOff),
                       ),
-                      RadioListTile<RelockTimeoutMode>(
-                        value: RelockTimeoutMode.custom,
-                        groupValue: tempMode,
-                        onChanged: (value) => setDialogState(() => tempMode = value!),
-                        title: Text('Custom: ${_formatDuration(tempSeconds)}'),
+                      _ChoiceTile(
+                        selected: tempMode == RelockTimeoutMode.custom,
+                        title: 'Custom: ${_formatDuration(tempSeconds)}',
+                        subtitle: 'Use the selected delay before the app locks again.',
+                        onTap: () => setDialogState(() => tempMode = RelockTimeoutMode.custom),
                       ),
                       AnimatedSize(
                         duration: const Duration(milliseconds: 220),
@@ -889,6 +888,77 @@ class _SecurityHistoryCard extends StatelessWidget {
     if (diff.inHours < 1) return '${diff.inMinutes}m ago';
     if (diff.inDays < 1) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+}
+
+class _ChoiceTile extends StatelessWidget {
+  const _ChoiceTile({
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final bool selected;
+  final bool enabled;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foregroundColor = enabled ? colorScheme.onSurface : colorScheme.onSurface.withValues(alpha: 0.42);
+    final subtitleColor = enabled ? colorScheme.onSurfaceVariant : colorScheme.onSurfaceVariant.withValues(alpha: 0.42);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? colorScheme.primaryContainer.withValues(alpha: 0.58) : Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: selected ? colorScheme.primary.withValues(alpha: 0.45) : colorScheme.outlineVariant.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                color: selected ? colorScheme.primary : subtitleColor,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: foregroundColor,
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: subtitleColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
