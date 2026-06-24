@@ -1007,6 +1007,8 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import java.util.Locale
 
 class AppLockAccessibilityService : AccessibilityService() {{
     private val monitorHandler = Handler(Looper.getMainLooper())
@@ -1073,6 +1075,17 @@ class AppLockAccessibilityService : AccessibilityService() {{
         updateForegroundTracking(packageNameFromEvent)
 
         if (packageNameFromEvent == "com.android.systemui") return
+
+        // App info, uninstall, and clear-data screens are guarded separately so
+        // clearing Pin Genie data or deleting any app cannot bypass the lock.
+        if (isSensitiveAppManagementPackage(packageNameFromEvent) && isSensitiveAppManagementScreenVisible()) {{
+            if (isTemporarilyUnlocked(SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE)) {{
+                extendTemporaryUnlock(SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE)
+            }} else {{
+                startSensitiveAppManagementGuard()
+                return
+            }}
+        }}
 
         // Installer/update/uninstall screens must not be bypassed completely.
         // They are protected with one PIN check first, then a temporary maintenance
@@ -1149,7 +1162,24 @@ class AppLockAccessibilityService : AccessibilityService() {{
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
             putExtra(NativeLockActivity.EXTRA_TARGET_PACKAGE, INSTALLER_GUARD_PACKAGE)
-            putExtra(NativeLockActivity.EXTRA_TARGET_LABEL, "App install/delete protection")
+            putExtra(NativeLockActivity.EXTRA_TARGET_LABEL, "App install / uninstall protection")
+        }}
+        startActivity(intent)
+    }}
+
+    private fun startSensitiveAppManagementGuard() {{
+        val now = System.currentTimeMillis()
+        val prefs = getSharedPreferences(NATIVE_PREFS, MODE_PRIVATE)
+        val key = lastStartedKey(SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE)
+        if (now - prefs.getLong(key, 0L) < 1200L) return
+        prefs.edit().putLong(key, now).apply()
+
+        val intent = Intent(this, NativeLockActivity::class.java).apply {{
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+            putExtra(NativeLockActivity.EXTRA_TARGET_PACKAGE, SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE)
+            putExtra(NativeLockActivity.EXTRA_TARGET_LABEL, "App delete / clear data protection")
         }}
         startActivity(intent)
     }}
@@ -1159,6 +1189,7 @@ class AppLockAccessibilityService : AccessibilityService() {{
         val prefs = getSharedPreferences(LOCK_STATE_PREFS, MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_SETUP_COMPLETE, false)) return false
         if (!prefs.getBoolean(KEY_PROTECTION_ENABLED, true)) return false
+        if (isSystemControlPackage(targetPackage)) return true
         val locked = prefs.getStringSet(KEY_LOCKED_PACKAGES, emptySet()) ?: emptySet()
         return locked.contains(targetPackage)
     }}
@@ -1244,6 +1275,12 @@ class AppLockAccessibilityService : AccessibilityService() {{
         "com.vivo.packageinstaller",
         "com.huawei.appmarket",
         "com.hihonor.appmarket",
+        "com.xiaomi.market",
+        "com.heytap.market",
+        "com.oppo.market",
+        "com.vivo.appstore",
+        "com.bbk.appstore",
+        "com.sec.android.app.samsungapps",
         "com.google.android.permissioncontroller",
         "com.android.permissioncontroller"
     )
@@ -1266,8 +1303,68 @@ class AppLockAccessibilityService : AccessibilityService() {{
         "com.iqoo.secure",
         "com.huawei.systemmanager",
         "com.hihonor.systemmanager",
-        "com.sec.android.app.samsungapps"
+        "com.sec.android.app.samsungapps",
+        "com.huawei.appmarket",
+        "com.hihonor.appmarket",
+        "com.xiaomi.market",
+        "com.heytap.market",
+        "com.oppo.market",
+        "com.vivo.appstore",
+        "com.bbk.appstore",
+        "com.transsion.phonemaster",
+        "com.infinix.xmanager",
+        "com.itel.security"
     )
+
+    private fun isSensitiveAppManagementPackage(packageName: String): Boolean {{
+        return isSystemControlPackage(packageName) || packageName in setOf(
+            "com.google.android.gms",
+            "com.google.android.gsf",
+            "com.android.shell"
+        )
+    }}
+
+    private fun isSensitiveAppManagementScreenVisible(): Boolean {{
+        val root = rootInActiveWindow ?: return false
+        val tokens = mutableListOf<String>()
+        collectNodeText(root, tokens, 0)
+        if (tokens.isEmpty()) return false
+        val text = tokens.joinToString(" ").lowercase(Locale.US)
+        val directSensitiveActions = listOf(
+            "uninstall",
+            "delete app",
+            "remove app",
+            "clear data",
+            "clear storage",
+            "erase data",
+            "wipe data",
+            "disable app",
+            "force stop"
+        )
+        if (directSensitiveActions.any {{ text.contains(it) }}) return true
+
+        val appInfoHints = listOf(
+            "app info",
+            "app details",
+            "application info",
+            "manage apps",
+            "storage & cache",
+            "storage usage",
+            "used storage"
+        )
+        val destructiveHints = listOf("storage", "data", "cache", "permissions", "default")
+        return appInfoHints.any {{ text.contains(it) }} && destructiveHints.any {{ text.contains(it) }}
+    }}
+
+    private fun collectNodeText(node: AccessibilityNodeInfo?, out: MutableList<String>, depth: Int) {{
+        if (node == null || depth > 8 || out.size > 160) return
+        node.text?.toString()?.trim()?.takeIf {{ it.isNotEmpty() }}?.let {{ out.add(it) }}
+        node.contentDescription?.toString()?.trim()?.takeIf {{ it.isNotEmpty() }}?.let {{ out.add(it) }}
+        node.viewIdResourceName?.trim()?.takeIf {{ it.isNotEmpty() }}?.let {{ out.add(it) }}
+        for (index in 0 until node.childCount) {{
+            collectNodeText(node.getChild(index), out, depth + 1)
+        }}
+    }}
 
     private fun isLockedPackage(targetPackage: String): Boolean {{
         val locked = getSharedPreferences(LOCK_STATE_PREFS, MODE_PRIVATE)
@@ -1307,6 +1404,7 @@ class AppLockAccessibilityService : AccessibilityService() {{
         const val KEY_MAINTENANCE_UNLOCKED_UNTIL = "maintenance_unlocked_until"
         const val KEY_LAST_FOREGROUND_PACKAGE = "last_foreground_package"
         const val INSTALLER_GUARD_PACKAGE = "pin.genie.installer.guard"
+        const val SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE = "pin.genie.app.management.guard"
         const val MAINTENANCE_UNLOCK_MS = 180_000L
         const val IMMEDIATE_UNLOCK_GRACE_MS = 1_200L
     }}
@@ -1607,6 +1705,7 @@ class NativeLockActivity : Activity() {{
 
         return when (packageNameValue) {{
             INSTALLER_GUARD_PACKAGE -> "Package installer"
+            SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE -> "App management protection"
             else -> if (cleaned.isNotBlank()) cleaned else "App"
         }}
     }}
@@ -2159,7 +2258,8 @@ class NativeLockActivity : Activity() {{
         recordSecurityEvent(method, "Unlocked successfully", false)
         val now = System.currentTimeMillis()
         val isInstallerGuard = packageToOpen == INSTALLER_GUARD_PACKAGE
-        val graceMs = if (isInstallerGuard || isSystemControlPackage(packageToOpen)) {{
+        val isSensitiveManagementGuard = packageToOpen == SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE
+        val graceMs = if (isInstallerGuard || isSensitiveManagementGuard || isSystemControlPackage(packageToOpen)) {{
             maxOf(lockDelayMs(), SYSTEM_CONTROL_UNLOCK_MS)
         }} else {{
             lockDelayMs()
@@ -2168,7 +2268,7 @@ class NativeLockActivity : Activity() {{
             .edit()
             .putLong(unlockedKey(packageToOpen), now + graceMs)
             .putLong(lastStartedKey(packageToOpen), now)
-        if (isInstallerGuard || isSystemControlPackage(packageToOpen)) {{
+        if (isInstallerGuard || isSensitiveManagementGuard || isSystemControlPackage(packageToOpen)) {{
             unlockEditor.putLong(KEY_MAINTENANCE_UNLOCKED_UNTIL, now + maxOf(graceMs, MAINTENANCE_UNLOCK_MS))
         }}
         unlockEditor.apply()
@@ -2196,7 +2296,17 @@ class NativeLockActivity : Activity() {{
         "com.iqoo.secure",
         "com.huawei.systemmanager",
         "com.hihonor.systemmanager",
-        "com.sec.android.app.samsungapps"
+        "com.sec.android.app.samsungapps",
+        "com.huawei.appmarket",
+        "com.hihonor.appmarket",
+        "com.xiaomi.market",
+        "com.heytap.market",
+        "com.oppo.market",
+        "com.vivo.appstore",
+        "com.bbk.appstore",
+        "com.transsion.phonemaster",
+        "com.infinix.xmanager",
+        "com.itel.security"
     )
 
     private fun sendUserHome() {{
@@ -2577,6 +2687,7 @@ class NativeLockActivity : Activity() {{
         const val KEY_MAINTENANCE_UNLOCKED_UNTIL = "maintenance_unlocked_until"
         const val KEY_LAST_FOREGROUND_PACKAGE = "last_foreground_package"
         const val INSTALLER_GUARD_PACKAGE = "pin.genie.installer.guard"
+        const val SENSITIVE_APP_MANAGEMENT_GUARD_PACKAGE = "pin.genie.app.management.guard"
         const val MAINTENANCE_UNLOCK_MS = 180_000L
         const val IMMEDIATE_UNLOCK_GRACE_MS = 1_200L
     }}

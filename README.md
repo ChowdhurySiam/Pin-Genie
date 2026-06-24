@@ -2,7 +2,7 @@
 
 **Pin Genie** is a Flutter-based Android app-lock project with a randomized PIN Genie unlock system, Material 3 interface, native AccessibilityService app guarding, biometric fallback, intruder-selfie logging, fake-crash disguise mode, and launcher app-disguise options.
 
-Current version: **1.2.26+120026**
+Current version: **1.2.27+120027**
 
 ---
 
@@ -10,6 +10,7 @@ Current version: **1.2.26+120026**
 
 - Randomized PIN Genie unlock screen
 - Native Android app-lock screen for selected apps
+- PIN-gated protection for Android app info, uninstall, and clear-data screens
 - Optional biometric unlock switcher
 - Dedicated Security page for PIN reset, recovery, retry timeout, and fallback unlock controls
 - Installed-app picker and lock management
@@ -47,6 +48,12 @@ Pin Genie does not show a normal fixed keypad. Each unlock step can randomize th
 ### Native app locking
 
 The Flutter app stores the selected locked apps. The Android native AccessibilityService watches foreground app changes and opens the native Pin Genie lock screen before a protected app can be used.
+
+### App delete and clear-data protection
+
+Pin Genie also guards Android app-management screens such as App info, Package Installer, Play Store uninstall flows, and common OEM security managers. When Accessibility protection is enabled, uninstall and clear-data screens are PIN-gated for Pin Genie itself and for other apps.
+
+Android still controls the final system action. Pin Genie can block or gate normal on-device UI flows through the AccessibilityService, but it cannot stop privileged tools such as ADB, root access, or manufacturer recovery tools.
 
 ### Biometric unlock
 

@@ -826,9 +826,13 @@ class AppLockController extends ChangeNotifier {
   }
 
   Future<void> lockCriticalSystemApps() async {
-    const updateFlowPackages = <String>{
-      // These packages must stay unblocked or Android APK update/install/uninstall
-      // sessions can fail after PIN verification.
+    const packageNames = <String>{
+      // Android app-management screens. These are PIN-gated by the native
+      // AccessibilityService so uninstall and clear-data flows cannot bypass
+      // Pin Genie protection.
+      'com.android.settings',
+      'com.android.settings.intelligence',
+      'com.android.vending',
       'com.google.android.packageinstaller',
       'com.android.packageinstaller',
       'com.samsung.android.packageinstaller',
@@ -839,15 +843,8 @@ class AppLockController extends ChangeNotifier {
       'com.vivo.packageinstaller',
       'com.google.android.permissioncontroller',
       'com.android.permissioncontroller',
-    };
 
-    const packageNames = <String>{
-      // Android core screens that are safe to protect.
-      'com.android.settings',
-      'com.android.settings.intelligence',
-      'com.android.vending',
-
-      // Common OEM security / permission managers.
+      // Common OEM security / app-store managers.
       'com.miui.securitycenter',
       'com.coloros.safecenter',
       'com.oplus.safecenter',
@@ -857,14 +854,19 @@ class AppLockController extends ChangeNotifier {
       'com.hihonor.systemmanager',
       'com.samsung.android.app.galaxyfinder',
       'com.sec.android.app.samsungapps',
+      'com.huawei.appmarket',
+      'com.hihonor.appmarket',
+      'com.xiaomi.market',
+      'com.heytap.market',
+      'com.oppo.market',
+      'com.vivo.appstore',
+      'com.bbk.appstore',
       'com.transsion.phonemaster',
       'com.infinix.xmanager',
       'com.itel.security',
     };
 
-    _lockedPackages
-      ..removeAll(updateFlowPackages)
-      ..addAll(packageNames);
+    _lockedPackages.addAll(packageNames);
     await _prefs.setStringList(_lockedPackagesKey, _lockedPackages.toList()..sort());
     await _syncNativeLockState();
     notifyListeners();
